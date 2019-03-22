@@ -763,7 +763,7 @@ process rseqc_count {
     publishDir "${params.outdir}/rseqc_counts" , mode: 'copy', pattern: "*xls"
     
     when:
-    !params.count_rseqc
+    params.count
 
     input:
     set val(name), file(bam_file) from sorted_bams_for_rseqc_count
