@@ -760,7 +760,7 @@ process rseqc_count {
     time '8h'
     validExitStatus 0,143
     memory '40 GB'
-    publishDir "${params.outdir}/qc/rseqc/counts" , mode: 'copy', pattern: "*txt"
+    publishDir "${params.outdir}/rseqc_counts" , mode: 'copy', pattern: "*xls"
     
     when:
     !params.count_rseqc
@@ -770,14 +770,14 @@ process rseqc_count {
     file(bam_indices) from sorted_bam_indices_for_rseqc_count
 
     output:
-    file "*.{txt}" into rseqc_counts
+    file "*.{xls}" into rseqc_counts
 
     script:
     """
     export PATH=~/.local/bin:$PATH
     
     FPKM_count.py -i ${bam_file} \
-                           -o ${name}.fpkm_counts \
+                           -o ${name}.counts \
                            -r ${genome_refseq} \
                            -e
     """
