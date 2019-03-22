@@ -100,7 +100,7 @@ The best way to run Nextflow is using an sbatch script using the same command sp
 
 | Arguments       | Usage       | Description                                                                         |
 |-----------------|-------------|-------------------------------------------------------------------------------------|
-| --count       |               | Count reads (FPKM normalized) over RefSeq gene file. \n **Should not be used as stand-alone analysis!** |
+| --count       |               | Count reads (FPKM normalized) over RefSeq gene file. ***Should not be used as stand-alone analysis! Only to be used as a quick first pass.*** |
 
 ### Credits
 
