@@ -40,7 +40,7 @@ To see a full list of options and pipeline version, enter:
 
 ***IMPORTANT: For individual users, we highly recommend installing all python packages in a virtual environment***
 
-This pipeline requires a number of optional python packages for qc and analysis. To install RSeQC, MultiQC, and FStitch, you can run the following:
+This pipeline requires a number of optional python packages for qc and analysis. To install RSeQC and MultiQC, you can run the following:
 
 ```
 $ pip3 install MultiQC --user
