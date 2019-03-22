@@ -706,9 +706,10 @@ process rseqc_qc {
         else if (filename.indexOf("read_duplication.DupRate_plot.r") > 0)            "read_duplication/rscripts/$filename"
         else if (filename.indexOf("read_duplication.pos.DupRate.xls") > 0)           "read_duplication/dup_pos/$filename"
         else if (filename.indexOf("read_duplication.seq.DupRate.xls") > 0)           "read_duplication/dup_seq/$filename"
-        else if (filename.indexOf("junction_annotation.junc.anno.junction.xls") > 0) "junction_annotation/anno/$filename"
-        else if (filename.indexOf("junction_annotation.anno.junction_plot.r") > 0)   "junction_annotation/rscripts/$filename"
-        else if (filename.indexOf("junction_annotation.*.pdf") > 0)                  "junction_annotation/$filename"
+        else if (filename.indexOf("junction_annotation.junction.xls") > 0)           "junction_annotation/anno/$filename"
+        else if (filename.indexOf("junction_annotation.junction_plot.r") > 0)        "junction_annotation/rscripts/$filename"
+        else if (filename.indexOf("junction_annotation.splice_events.pdf") > 0)      "junction_annotation/$filename"
+        else if (filename.indexOf("junction_annotation.splice_junction.pdf") > 0)    "junction_annotation/$filename"
         else if (filename.indexOf("bam_stat.txt") > 0)                               "bam_stat/$filename"
         else if (filename.indexOf("junction_saturation.junctionSaturation_plot.r") > 0)                                                                                                                            "junction_saturation/rscripts/$filename"
         else if (filename.indexOf("junction_saturation.junctionSaturation_plot.pdf") > 0)                                                                                                                          "junction_saturation/$filename"
@@ -732,7 +733,7 @@ process rseqc_qc {
     
     read_distribution.py -i ${bam_file} \
                          -r ${genome_refseq} \
-                         > ${name}.read_dist.txt
+                         > ${name}.read_distribution.txt
 
     read_duplication.py -i ${bam_file} \
                         -o ${name}.read_duplication
