@@ -1,4 +1,4 @@
-# Nextflow Implementation of the Dowell Lab Nascent Pipeline
+# Nextflow Implementation of the Dowell Lab Steady State (RNA-seq) Pipeline
 
 ### Usage
 
@@ -6,15 +6,11 @@
 
 Clone this repository in your home directory:
 
-    $ git clone git@github.com:Dowell-Lab/Nascent-Flow.git
+    $ git clone git@github.com:Dowell-Lab/RNAseq-Flow.git
 
 Install Nextflow:
 
     $ curl -s https://get.nextflow.io | bash
-
-#### Reference
-
-If you've used this in your research, you can cite this pipeline using DOI 10.17605/OSF.IO/NDHJ2 ([OSF project](https://osf.io/ndhj2/)).
     
 #### Slurm-Specific Usage Requirements
 ##### Primary Run Settings
@@ -23,11 +19,10 @@ If you are using Linux, this will install nextflow to your home directory. As su
 
     $export PATH=~:$PATH
 
-Secondly, edit the appropriate config file, e.g. `conf/slurm_grch38.config`, to ensure the proper paths are set for genome reference files and other executables (look for all mentions of `COMPLETE_*`). Variable names should hopefully be self-explanatory. Note that Tfit/FStitch are optional, so you do not need to fill those paths unless you plan to run those in the pipeline. See below for more Tfit/FStitch details. As of version 1.0, there are now flags by which you can provide directories containing fastqs and sras. Furthermore, you can now specify the Nextflow working directory and output directory with flags. Last, you must also now specify the email to which the report will be sent for the run.
+Secondly, edit the appropriate config file, e.g. `conf/slurm_grch38.config`, to ensure the proper paths are set for genome reference files and other executables (look for all mentions of `COMPLETE_*`). Variable names should hopefully be self-explanatory. An example run with the required arguments is as follows:
 
 ```
-
-    $ nextflow run main.nf -profile slurm_grch38 --workdir '</nextflow/work/temp/>' --genome_id 'hg38' --outdir '</my/project/>' --email <john.doe@themailplace.com> --sras '</dir/to/sras/*>'
+    $ nextflow run main.nf -profile slurm_grch38 --workdir '</nextflow/work/temp/>'  --outdir '</my/project/>' --email <john.doe@themailplace.com> --sras '</dir/to/sras/*>'
     
 ```
 
@@ -40,14 +35,6 @@ If anything went wrong, you don't need to restart the pipeline from scratch. Ins
 To see a full list of options and pipeline version, enter:
     
     $ nextflow run main.nf -profile slurm_grch38 --help
-    
-##### FStitch Requirements
-
-FStitch can now optionally be run to segment nascent data into active and inactive regions of transcription and annotate bidirectionals (see https://github.com/Dowell-Lab/FStitch). To run FStitch, you must specify additional parameters in your config file including `FS_path` and `FS_train` which are the full path to the FStitch executable (once compiled) and the training file, respectively. See `slurm.config` for example parameterization. This option can be executed in the pipeline through the `--fstitch` argument. Please note that the FStitch bidir module is in Python3 and must also be pip installed (see Python Package Requirements).
-
-##### Tfit Requirements
-
-Tfit is also now included in the pipeline and will model RNAPII activity using the `model` module (see https://github.com/Dowell-Lab/Tfit). Running Tfit in the pipeline requires that the user also runs FStitch as the `bidir` module will be used to gernerate regions of putitive activity to model. Only the default Tfit parameters are used, and there may be additional options that will help refine your data. This will typically take a long time to run (2-48hrs depending on dataset complexity) based on the default 16 thread usage allocation, so be sure to plan accordingly if you include this in the pipeline.
 
 ##### Python Package Requirements
 
@@ -58,7 +45,6 @@ This pipeline requires a number of optional python packages for qc and analysis.
 ```
 $ pip3 install MultiQC --user
 $ pip3 install RSeQC --user
-$ pip3 install FStitch-Bidir --user
 ```
 
 Note that all packages are Python3.
@@ -114,13 +100,9 @@ The best way to run Nextflow is using an sbatch script using the same command sp
 
 | Arguments       | Usage       | Description                                                                         |
 |-----------------|-------------|-------------------------------------------------------------------------------------|
-| --fstitch       |             | Runs FStitch to segment nascent data into active/inactive regions of transcription. |
-| --tfit          |             | Runs Tfit to model RNAPII activity. Must be run in conjunction with FStitch (--fstitch).|
-| --prelimtfit    |             | Runs Tfit to model RNAPII activity. Does not require FStitch; uses Tfit prelim module.|
+| --count       |               | Count reads (FPKM normalized) over RefSeq gene file. \n **Should not be used as stand-alone analysis!** |
 
 ### Credits
 
-* Ignacio Tripodi ([@ignaciot](https://github.com/ignaciot)): Nextflow base code and structure, pipeline implementation
 * Margaret Gruca ([@magruca](https://github.com/magruca)): Nextflow pipeline optimization, original pipeline design and optimization
-* Zach Maas ([@zmaas](https://github.com/zmaas)): Testing and adding a FastQC parser
 
