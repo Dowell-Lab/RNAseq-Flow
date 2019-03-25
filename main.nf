@@ -494,24 +494,22 @@ process bbduk {
 
 process fastqc_trimmed {
     validExitStatus 0,1
-    tag "$prefix"
+    tag "$name"
     memory '4 GB'
     publishDir "${params.outdir}/qc/fastqc/", mode: 'copy',
         saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
 
     input:
-    set val(prefix), file(trimmed_reads) from trimmed_reads_fastqc
+    set val(name), file(trimmed_reads) from trimmed_reads_fastqc
 
     output:
     file "*_fastqc.{zip,html,txt}" into trimmed_fastqc_results
 
     script:
-    prefix = trimmed_reads.baseName
     """
-    echo ${prefix}
+    echo ${name}
 
     fastqc $trimmed_reads
-		extract_fastqc_stats.sh --srr=${prefix} > ${prefix}_stats_fastqc.txt
     """
 }
 
@@ -760,7 +758,7 @@ process rseqc_count {
     time '8h'
     validExitStatus 0,143
     memory '40 GB'
-    publishDir "${params.outdir}/rseqc_counts" , mode: 'copy', pattern: "*xls"
+    publishDir "${params.outdir}/rseqc_counts" , mode: 'copy', pattern: "*FPKM.xls"
     
     when:
     params.count
@@ -770,7 +768,7 @@ process rseqc_count {
     file(bam_indices) from sorted_bam_indices_for_rseqc_count
 
     output:
-    file "*.{xls}" into rseqc_counts
+    file "*FPKM.xls" into rseqc_counts
 
     script:
     """
