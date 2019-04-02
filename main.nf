@@ -342,10 +342,7 @@ process fastQC {
 
     script:
     """
-    echo ${prefix}
-
     fastqc $reads
-		extract_fastqc_stats.sh --srr=${prefix} > ${prefix}_stats_fastqc.txt
     """
 }
 
@@ -843,6 +840,7 @@ process bedgraphs {
                      -strand + \
                      -g hg38 \
                      -ibam ${bam_file} \
+                     -split \
                      > ${name}.pos.bedGraph
 
     genomeCoverageBed \
@@ -850,6 +848,7 @@ process bedgraphs {
                      -strand - \
                      -g hg38 \
                      -ibam ${bam_file} \
+                     -split \
                      > ${name}.tmp.neg.bedGraph
 
      awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' ${name}.tmp.neg.bedGraph \
