@@ -261,7 +261,6 @@ process get_software_versions {
     samtools --version > v_samtools.txt
     fastq-dump --version > v_fastq-dump.txt
     preseq > v_preseq.txt
-    seqkit version > v_seqkit.txt
     bedtools --version > v_bedtools.txt
     igvtools version > v_igv-tools.txt
 
