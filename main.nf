@@ -68,6 +68,7 @@ def helpMessage() {
     Input File options:
         --singleEnd                    Specifies that the input files are not paired reads (default is paired-end).
         --flip                         Reverse complements each strand. Necessary for some library preps.
+        --flipR2                       Reverse complements R2 only.       
 
     Save options:
         --outdir                       Specifies where to save the output from the nextflow run.
@@ -203,6 +204,7 @@ summary['Save BAM']         = params.skipBAM ? 'NO' : 'YES'
 summary['Save fastq']       = params.savefq ? 'YES' : 'NO'
 summary['Save Trimmed']     = params.saveTrim ? 'YES' : 'NO'
 summary['Reverse Comp']     = params.flip ? 'YES' : 'NO'
+summary['Reverse Comp R2']  = params.flipR2 ? 'YES' : 'NO'
 summary['Run RSeQC']        = params.skipRSeQC ? 'NO' : 'YES'
 summary['Run Count']        = params.count ? 'NO' : 'YES'
 summary['Run MultiQC']      = params.skipMultiQC ? 'NO' : 'YES'
@@ -396,39 +398,66 @@ process bbduk {
         """
         echo ${name}
 
-        seqkit seq -j 16 -r -p \
-                  ${name}_R1.flip.fastq \
-                  -o ${name}.flip.fastq
-                  
-        seqkit seq -j 16 -r -p \
-                 ${name}_R2.flip.fastq \
-                 -o ${name}.flip.fastq
-
-        
+        reformat.sh -Xmx20g \
+                t=16 \
+                in=${name}_R1.fastq \
+                in2=${name}_R2.fastq \
+                out=${name}_R1.flip.fastq \
+                out2=${name}_R2.flip.fastq \
+                rcomp=t
 
         bbduk.sh -Xmx20g \
-                  t=16 \
-                  in=${name}_R1.flip.fastq \
-                  in2=${name}_R2.flip.fastq \
-                  out=${name}_R1.flip.trim.fastq \
-                  out2=${name}_R2.flip.trim.fastq \
-                  ref=${bbmap_adapters} \
-                  ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
-                  maq=10 minlen=25 \
-                  tpe tbo \
-                  literal=AAAAAAAAAAAAAAAAAAAAAAA \
-                  stats=${name}.trimstats.txt \
-                  refstats=${name}.refstats.txt \
-                  ehist=${name}.ehist.txt
+                t=16 \
+                in=${name}_R1.flip.fastq \
+                in2=${name}_R2.flip.fastq \
+                out=${name}_R1.flip.trim.fastq \
+                out2=${name}_R2.flip.trim.fastq \
+                ref=${bbmap_adapters} \
+                ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                maq=10 minlen=25 \
+                tpe tbo \
+                literal=AAAAAAAAAAAAAAAAAAAAAAA \
+                stats=${name}.trimstats.txt \
+                refstats=${name}.refstats.txt \
+                ehist=${name}.ehist.txt
         """
-    } else if (params.flip) {
+    } else if (!params.singleEnd && params.flipR2) {
+                """
+        echo ${name}
+
+        reformat.sh -Xmx20g \
+                t=16 \
+                in=${name}_R1.fastq \
+                in2=${name}_R2.fastq \
+                out=${name}_R1.flip.fastq \
+                out2=${name}_R2.flip.fastq \
+                rcompmate=t
+
+        bbduk.sh -Xmx20g \
+                t=16 \
+                in=${name}_R1.flip.fastq \
+                in2=${name}_R2.flip.fastq \
+                out=${name}_R1.flip.trim.fastq \
+                out2=${name}_R2.flip.trim.fastq \
+                ref=${bbmap_adapters} \
+                ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                maq=10 minlen=25 \
+                tpe tbo \
+                literal=AAAAAAAAAAAAAAAAAAAAAAA \
+                stats=${name}.trimstats.txt \
+                refstats=${name}.refstats.txt \
+                ehist=${name}.ehist.txt
+        """
+    }else if (params.flip) {
         """
         echo ${name}
 
 
-        seqkit seq -j 16 -r -p \
-                  ${name}.fastq \
-                  -o ${name}.flip.fastq
+        reformat.sh -Xmx20g \
+                t=16 \
+                in=${name}.fastq \
+                out=${name}.flip.fastq \
+                rcomp=t
 
         
         bbduk.sh -Xmx20g \
