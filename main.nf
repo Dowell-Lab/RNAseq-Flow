@@ -152,13 +152,10 @@ if (params.fastqs) {
     if (params.singleEnd) {
         fastq_reads_qc = Channel
                             .fromPath(params.fastqs)
-                            .map { file -> tuple(file.baseName, file) }
+                            .map { file -> tuple(file.simpleName, file) }
         fastq_reads_trim = Channel
                             .fromPath(params.fastqs)
-                            .map { file -> tuple(file.baseName, file) }
-        fastq_reads_gzip = Channel
-                            .fromPath(params.fastqs)
-                            .map { file -> tuple(file.baseName, file) }
+                            .map { file -> tuple(file.simpleName, file) }
     } else {
         Channel
             .fromFilePairs( params.fastqs, size: params.singleEnd ? 1 : 2 )
