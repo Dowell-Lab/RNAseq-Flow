@@ -394,6 +394,7 @@ process bbduk {
                 out2=${name}_R2.flip.trim.fastq.gz \
                 ref=${bbmap_adapters} \
                 ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                nullifybrokenquality=t \
                 maq=10 minlen=25 \
                 tpe tbo \
                 literal=AAAAAAAAAAAAAAAAAAAAAAA \
@@ -420,13 +421,14 @@ process bbduk {
                 out2=${name}_R2.flip.trim.fastq.gz \
                 ref=${bbmap_adapters} \
                 ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                nullifybrokenquality=t \
                 maq=10 minlen=25 \
                 tpe tbo \
                 literal=AAAAAAAAAAAAAAAAAAAAAAA \
                 stats=${name}.trimstats.txt \
                 refstats=${name}.refstats.txt
         """
-    }else if (params.flip) {
+    } else if (params.flip) {
         """
         echo ${name}
 
@@ -444,6 +446,7 @@ process bbduk {
                   out=${name}.flip.trim.fastq.gz \
                   ref=${bbmap_adapters} \
                   ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                  nullifybrokenquality=t \
                   maq=10 minlen=25 \
                   tpe tbo \
                   literal=AAAAAAAAAAAAAAAAAAAAAAA \
@@ -464,6 +467,7 @@ process bbduk {
                   out2=${name}_R2.trim.fastq.gz \
                   ref=${bbmap_adapters} \
                   ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                  nullifybrokenquality=t \
                   maq=10 minlen=25 \
                   tpe tbo \
                   literal=AAAAAAAAAAAAAAAAAAAAAAA \
@@ -480,6 +484,7 @@ process bbduk {
                   out=${name}.trim.fastq.gz \
                   ref=${bbmap_adapters} \
                   ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                  nullifybrokenquality=t \
                   maq=10 minlen=25 \
                   tpe tbo \
                   literal=AAAAAAAAAAAAAAAAAAAAAAA \
@@ -945,7 +950,7 @@ process multiQC {
     file ('qc/rseqc/*') from rseqc_results.collect()
     file ('qc/preseq/*') from preseq_results.collect()
     file ('software_versions/*') from software_versions_yaml
-    file ('qc/hisat2_mapstats*') from hisat2_mapstats.collect()
+    file ('qc/hisat2_mapstats/*') from hisat2_mapstats.collect()
 
     output:
     file "*multiqc_report.html" into multiqc_report
