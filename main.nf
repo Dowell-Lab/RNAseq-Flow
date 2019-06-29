@@ -451,8 +451,7 @@ process bbduk {
                   tpe tbo \
                   literal=AAAAAAAAAAAAAAAAAAAAAAA \
                   stats=${name}.trimstats.txt \
-                  refstats=${name}.refstats.txt \
-                  ehist=${name}.ehist.txt
+                  refstats=${name}.refstats.txt
         """
     }
         else if (!params.singleEnd) {
