@@ -77,7 +77,9 @@ def helpMessage() {
         --saveTrim                     Compresses and saves trimmed fastq reads.
         --skipBAM                      Skip saving BAM files. Only CRAM files will be saved with this option.
         --saveAll                      Compresses and saves all fastq reads.
-
+        --savebw                       Saves pos/neg bigwig files for UCSC genome browser.        
+        --savebg                       Saves concatenated pos/neg bedGraph file.     
+        
     QC Options:
         --skipMultiQC                  Skip running MultiQC.
         --skipRSeQC                    Skip running RSeQC.
@@ -199,6 +201,8 @@ summary['Thread fqdump']    = params.threadfqdump ? 'YES' : 'NO'
 summary['Data Type']        = params.singleEnd ? 'Single-End' : 'Paired-End'
 summary['Save All fastq']   = params.saveAllfq ? 'YES' : 'NO'
 summary['Save BAM']         = params.skipBAM ? 'NO' : 'YES'
+summary['Save BigWig']      = params.savebw ? 'YES' : 'NO'
+summary['Save bedGraph']    = params.savebg ? 'YES' : 'NO'
 summary['Save fastq']       = params.savefq ? 'YES' : 'NO'
 summary['Save Trimmed']     = params.saveTrim ? 'YES' : 'NO'
 summary['Reverse Comp']     = params.flip ? 'YES' : 'NO'
@@ -800,9 +804,9 @@ process bedgraphs {
     tag "$name"
     memory '80 GB'
     time '4h'
-    publishDir "${params.outdir}/mapped/bedgraphs", mode: 'copy', pattern: "*{neg,pos}.bedGraph"
-    publishDir "${params.outdir}/mapped/bedgraphs", mode: 'copy', pattern: "${name}.bedGraph"
-    publishDir "${params.outdir}/mapped/rcc_bedgraphs", mode: 'copy', pattern: "${name}.rcc.bedGraph"
+    if (params.savebg) {
+            publishDir "${params.outdir}/mapped/bedgraphs", mode: 'copy', pattern: "${name}.bedGraph"
+    } 
 
     input:
     set val(name), file(bam_file) from sorted_bams_for_bedtools_bedgraph
@@ -883,6 +887,9 @@ process normalized_bigwigs {
     tag "$name"
     memory '30 GB'
     publishDir "${params.outdir}/mapped/rcc_bigwig", mode: 'copy'
+    
+    when:
+    params.savebw
 
     input:
     set val(name), file(neg_bedgraph) from bedgraph_bigwig_neg
