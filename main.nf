@@ -297,13 +297,13 @@ process sra_dump {
 
     script:
     prefix = reads.baseName
-    if (!params.threadfqdump) {
+    if (!params.threadfqdump && params.singleEnd) {
         """
         echo ${prefix}
 
-        fastq-dump ${reads} --gzip
+        fastq-dump --split-3 ${reads} --gzip
         """
-    } else if (!params.singleEnd) {
+    } else if (!params.singleEnd && params.threadfqdump) {
          """
         export PATH=~/.local/bin:$PATH
 
@@ -384,18 +384,18 @@ process bbduk {
 
         reformat.sh -Xmx20g \
                 t=16 \
-                in=${name}_R1.fastq.gz \
-                in2=${name}_R2.fastq.gz \
-                out=${name}_R1.flip.fastq.gz \
-                out2=${name}_R2.flip.fastq.gz \
+                in=${name}_1.fastq.gz \
+                in2=${name}_2.fastq.gz \
+                out=${name}_1.flip.fastq.gz \
+                out2=${name}_2.flip.fastq.gz \
                 rcomp=t
 
         bbduk.sh -Xmx20g \
                 t=16 \
-                in=${name}_R1.flip.fastq.gz \
-                in2=${name}_R2.flip.fastq.gz \
-                out=${name}_R1.flip.trim.fastq.gz \
-                out2=${name}_R2.flip.trim.fastq.gz \
+                in=${name}_1.flip.fastq.gz \
+                in2=${name}_2.flip.fastq.gz \
+                out=${name}_1.flip.trim.fastq.gz \
+                out2=${name}_2.flip.trim.fastq.gz \
                 ref=${bbmap_adapters} \
                 ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
                 nullifybrokenquality=t \
@@ -411,18 +411,18 @@ process bbduk {
 
         reformat.sh -Xmx20g \
                 t=16 \
-                in=${name}_R1.fastq.gz \
-                in2=${name}_R2.fastq.gz \
-                out=${name}_R1.flip.fastq.gz \
-                out2=${name}_R2.flip.fastq.gz \
+                in=${name}_1.fastq.gz \
+                in2=${name}_2.fastq.gz \
+                out=${name}_1.flip.fastq.gz \
+                out2=${name}_2.flip.fastq.gz \
                 rcompmate=t
 
         bbduk.sh -Xmx20g \
                 t=16 \
-                in=${name}_R1.flip.fastq.gz \
-                in2=${name}_R2.flip.fastq.gz \
-                out=${name}_R1.flip.trim.fastq.gz \
-                out2=${name}_R2.flip.trim.fastq.gz \
+                in=${name}_1.flip.fastq.gz \
+                in2=${name}_2.flip.fastq.gz \
+                out=${name}_1.flip.trim.fastq.gz \
+                out2=${name}_2.flip.trim.fastq.gz \
                 ref=${bbmap_adapters} \
                 ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
                 nullifybrokenquality=t \
@@ -464,10 +464,10 @@ process bbduk {
 
         bbduk.sh -Xmx20g \
                   t=16 \
-                  in=${name}_R1.fastq.gz \
-                  in2=${name}_R2.fastq.gz \
-                  out=${name}_R1.trim.fastq.gz \
-                  out2=${name}_R2.trim.fastq.gz \
+                  in=${name}_1.fastq.gz \
+                  in2=${name}_2.fastq.gz \
+                  out=${name}_1.trim.fastq.gz \
+                  out2=${name}_2.trim.fastq.gz \
                   ref=${bbmap_adapters} \
                   ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
                   nullifybrokenquality=t \
@@ -546,7 +546,7 @@ process hisat2 {
     file("*.txt") into hisat2_mapstats    
 
     script:
-    if (!params.singleEnd) {
+    if (!params.singleEnd && !params.flip) {
         """
         echo ${name}
     
@@ -556,13 +556,30 @@ process hisat2 {
                 --pen-noncansplice 14 \
                 --mp 1,0 \
                 --sp 3,1 \
-                -1 ${name}_R1.trim.fastq.gz \
-                -2 ${name}_R2.trim.fastq.gz \
+                -1 ${name}_1.trim.fastq.gz \
+                -2 ${name}_2.trim.fastq.gz \
                 --new-summary \
                 > ${name}.sam \
                 2> ${name}.hisat2_mapstats.txt                
         """
-    } else {
+    }
+    if (!params.singleEnd && (params.flip || params.flipR2)) {
+        """
+        echo ${name}
+        hisat2  -p 32 \
+                --very-sensitive \
+                -x ${indices_path} \
+                --pen-noncansplice 14 \
+                --mp 1,0 \
+                --sp 3,1 \
+                -1 ${name}_1.flip.trim.fastq.gz \
+                -2 ${name}_2.flip.trim.fastq.gz \
+                --new-summary \
+                > ${name}.sam \
+                2> ${name}.hisat2_mapstats.txt                
+        """
+    }
+    else {
         """
         echo ${name}
     
