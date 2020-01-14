@@ -14,33 +14,28 @@ Steady Sate Analysis Pipeline. Started 2018-06-21.
 Pipeline steps:
 
     1. Pre-processing sra/fastq
-        1a. SRA tools -- fasterq-dump sra to generate fastq file
-        1b. FastQC (pre-trim) -- perform pre-trim FastQC on fastq files
+        # SRA tools -- fasterq-dump sra to generate fastq file
+        # FastQC (pre-trim) -- perform pre-trim FastQC on fastq files
 
-    2. Trimming
-        2a. BBDuk -- trim fastq files for quality and adapters
-        2b. FastQC (post-trim) -- perform post-trim FastQC on fastq files (ensure trimming performs as expected)
+    2. Trimming, QC, Mapping
+        # BBDuk -- trim fastq files for quality and adapters
+        # FastQC (post-trim) -- perform post-trim FastQC on fastq files (ensure trimming performs as expected)
+        # HISAT2 -- map to genome reference file
 
-    3. Mapping w/ HISAT2 -- map to genome reference file
+    3. SAMtools -- convert SAM file to BAM, index BAM, flagstat BAM
 
-    4. SAMtools -- convert SAM file to BAM, index BAM, flagstat BAM
+    4. Quality control
+        # preseq -- estimate library complexity
+        # RSeQC -- calculate genomic coverage relative to a reference file, infer experiement (single- v. paired-end), read duplication
+        # Pileup.sh : BBMap Suite -- genomic coverage by chromosome, GC content, pos/neg reads, intron/exon ratio
+        # RSeQC Counts : Read counts for a provided RefSeq annotation file
 
-    5. Quality control
-        5a. preseq -- estimate library complexity
-        5b. RSeQC -- calculate genomic coverage relative to a reference file, infer experiement (single- v. paired-end), read duplication
-        5c. Pileup.sh : BBMap Suite -- genomic coverage by chromosome, GC content, pos/neg reads, intron/exon ratio
-
-    6. Coverage files
-        6d. BEDTools : non-normalized & nornmalized bedgraphs
-        6b. BEDTools and kentUtils : 5' bigwigs for dREG & normalized bigwigs for genome browser
-        
-    7. Normalizing bigwigs for Genome Browser use
-
-    8. IGV Tools : bedGraph --> tdf
+    5. Coverage files
+        # BEDTools : non-normalized & nornmalized bedgraphs
+        # Generating/normalizing bigwigs for Genome Browser use
+        # IGV Tools : bedGraph --> TDF
     
-    9. RSeQC Counts : Read counts for a provided RefSeq annotation file
-
-    10. MultiQC : generate QC report for pipeline
+    6. MultiQC : generate QC report for pipeline
 
 */
 
@@ -62,6 +57,11 @@ def helpMessage() {
          --sras                        Directory pattern for SRA files: /project/*.sras (Required if --fastqs not specified)
          --workdir                     Nextflow working directory where all intermediate files are saved.
          --email                       Where to send workflow report email.
+         
+    Strandedness:
+         --forward_stranded            The library is forward stranded (e.g. NuGEN libraries).
+         --reverse_stranded            The library is reverse stranded (TruSeq libraries -- most common).
+         --unstranded                  The default behavior. 
 
     Performance options:
         --threadfqdump                 Runs multi-threading for fastq-dump for sra processing.
@@ -78,13 +78,13 @@ def helpMessage() {
         --skipBAM                      Skip saving BAM files. Only CRAM files will be saved with this option.
         --saveAll                      Compresses and saves all fastq reads.
         --savebw                       Saves pos/neg bigwig files for UCSC genome browser.        
-        --savebg                       Saves concatenated pos/neg bedGraph file.     
         
     QC Options:
         --skipMultiQC                  Skip running MultiQC.
         --skipRSeQC                    Skip running RSeQC.
         
     Analysis Options:
+        --noTrim                       Skip trimming and map only. Will also skip flip/flipR2 (any BBMap) steps.    
         --count                        Run RSeQC FPKM count over RefSeq annotated genes.
 
     """.stripIndent()
@@ -110,6 +110,10 @@ params.bbmap_adapters = "$baseDir/bin/adapters.fa"
 params.bedGraphToBigWig = "$baseDir/bin/bedGraphToBigWig"
 params.rcc = "$baseDir/bin/rcc.py"
 params.workdir = "./nextflowTemp"
+forward_stranded = params.forward_stranded
+reverse_stranded = params.reverse_stranded
+unstranded = params.unstranded
+params.extract_fastqc_stats = "$baseDir/bin/extract_fastqc_stats.sh"
 
 multiqc_config = file(params.multiqc_config)
 output_docs = file("$baseDir/docs/output.md")
@@ -158,18 +162,21 @@ if (params.fastqs) {
         fastq_reads_trim = Channel
                             .fromPath(params.fastqs)
                             .map { file -> tuple(file.simpleName, file) }
+        fastq_reads_subsample = Channel
+                            .fromPath(params.fastqs)
+                            .map { file -> tuple(file.simpleName, file) }        
     } else {
         Channel
             .fromFilePairs( params.fastqs, size: params.singleEnd ? 1 : 2 )
             .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
-            .into { fastq_reads_qc; fastq_reads_trim; fastq_reads_gzip }
+            .into { fastq_reads_qc; fastq_reads_trim; fastq_reads_subsample }
     }
 }
 
 else {
     Channel
         .empty()
-        .into { fastq_reads_qc; fastq_reads_trim; fastq_reads_gzip }
+        .into { fastq_reads_qc; fastq_reads_trim }
 }
 
 if (params.sras) {
@@ -197,9 +204,11 @@ if(params.reads) summary['Reads']     = params.reads
 if(params.fastqs) summary['Fastqs']   = params.fastqs
 if(params.sras) summary['SRAs']       = params.sras
 summary['Genome Ref']       = params.genome
+summary['Strandedness']     = ( unstranded ? 'None' : forward_stranded ? 'Forward' : reverse_stranded ? 'Reverse' : 'None' )
 summary['Thread fqdump']    = params.threadfqdump ? 'YES' : 'NO'
 summary['Data Type']        = params.singleEnd ? 'Single-End' : 'Paired-End'
 summary['Save All fastq']   = params.saveAllfq ? 'YES' : 'NO'
+summary['Skip Trimming']    = params.noTrim ? 'NO' : 'YES'
 summary['Save BAM']         = params.skipBAM ? 'NO' : 'YES'
 summary['Save BigWig']      = params.savebw ? 'YES' : 'NO'
 summary['Save bedGraph']    = params.savebg ? 'YES' : 'NO'
@@ -274,7 +283,7 @@ process get_software_versions {
 }
 
 /*
- * Step 1a -- get fastq files from downloaded sras
+ * Step 1 -- get fastq files from downloaded sras
  */
 
 process sra_dump {
@@ -292,21 +301,19 @@ process sra_dump {
     set val(prefix), file(reads) from read_files_sra
 
     output:
-    set val(prefix), file("*.fastq.gz") into fastq_reads_qc_sra, fastq_reads_trim_sra, fastq_reads_gzip_sra
+    set val(prefix), file("*.fastq.gz") into fastq_reads_qc_sra, fastq_reads_trim_sra, fastq_reads_hisat2_notrim_sra
    
 
     script:
     prefix = reads.baseName
-    if (!params.threadfqdump && params.singleEnd) {
+    if (!params.threadfqdump) {
         """
         echo ${prefix}
-
-        fastq-dump --split-3 ${reads} --gzip
+        fastq-dump ${reads} --gzip
         """
-    } else if (!params.singleEnd && params.threadfqdump) {
+    } else if (!params.singleEnd) {
          """
         export PATH=~/.local/bin:$PATH
-
         parallel-fastq-dump \
             --threads 8 \
             --gzip \
@@ -316,13 +323,11 @@ process sra_dump {
     } else if (!params.threadfqdump && !params.singleEnd) {
         """
         echo ${prefix}
-
         fastq-dump --split-3 ${reads} --gzip
         """
     } else {
         """
         export PATH=~/.local/bin:$PATH
-
         parallel-fastq-dump \
             --threads 8 \
             --gzip \
@@ -332,287 +337,376 @@ process sra_dump {
 }
 
 /*
- * STEP 1b - FastQC
+ * STEP 1+ - FastQC
  */
 
 process fastQC {
     validExitStatus 0,1
     tag "$prefix"
     memory '8 GB'
-    publishDir "${params.outdir}/qc/fastqc/", mode: 'copy',
-        saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+    publishDir "${params.outdir}" , mode: 'copy',
+    saveAs: {filename ->
+             if (filename.indexOf("zip") > 0)     "qc/fastqc/zips/$filename"
+        else if (filename.indexOf("html") > 0)    "qc/fastqc/$filename"
+        else if (filename.indexOf("txt") > 0)     "qc/fastqc_stats/$filename"
+        else null            
+    }
+    
+    when:
+    !params.skipFastQC && !params.skipAllQC
 
     input:
     set val(prefix), file(reads) from fastq_reads_qc.mix(fastq_reads_qc_sra)
 
     output:
-    file "*.{zip,html,txt}" into fastqc_results
+    file "*.{zip,html}" into fastqc_results
+    file "*.fastqc_stats.txt" into fastqc_stats
 
     script:
     """
+    echo ${prefix}
     fastqc $reads
+    
+    ${params.extract_fastqc_stats} \
+        --srr=${prefix} \
+        > ${prefix}.fastqc_stats.txt    
     """
 }
 
-
 /*
- * STEP 2a - Trimming
+ * STEP 2 - Trimming & Mapping
  */
 
-process bbduk {
-    validExitStatus 0,1
+process bbduk_hisat2 {
+    validExitStatus 0
     tag "$name"
-    cpus 16
+    cpus 32
     time '2h'
-    memory '20 GB'
-    publishDir "${params.outdir}/qc/trimstats", mode: 'copy', pattern: "*.txt"
+    memory '40 GB'
+    publishDir "${params.outdir}/qc/trimstats", mode: 'copy', pattern: "*.{refstats,trimstats}.txt"
+    publishDir "${params.outdir}/qc/hisat2_mapstats", mode: 'copy', pattern: "*hisat2_mapstats.txt"    
     if (params.saveTrim || params.saveAllfq) {
         publishDir "${params.outdir}/fastq_trimmed", mode: 'copy', pattern: "*.fastq.gz"
-    }      
+    }
+    
+    when:
+    !params.noTrim
 
     input:
+    file(indices) from hisat2_indices
+    val(indices_path) from hisat2_indices        
     set val(name), file(reads) from fastq_reads_trim.mix(fastq_reads_trim_sra)
 
     output:
-    set val(name), file ("*.trim.fastq.gz") into trimmed_reads_fastqc, trimmed_reads_hisat2
-    file "*.txt" into trim_stats
+    set val(name), file("*.trim.fastq.gz") into trimmed_reads_fastqc
+    file "*.{refstats,trimstats}.txt" into trim_stats
+    set val(name), file("*.sam") into hisat2_sam
+    file("*hisat2_mapstats.txt") into hisat2_mapstats       
 
     script:
+    prefix_pe = reads[0].toString() - ~/(_1\.)?(_R1)?(\.fq)?(fq)?(\.fastq)?(fastq)?(\.gz)?$/
+    prefix_se = reads[0].toString() - ~/(\.fq)?(\.fastq)?(\.gz)?$/
+    
+    def rnastrandness = ''
+    if (params.forwardStranded && !params.unStranded){
+        rnastrandness = params.singleEnd ? '--rna-strandness F' : '--rna-strandness FR'
+    } else if (params.reverseStranded && !params.unStranded){
+        rnastrandness = params.singleEnd ? '--rna-strandness R' : '--rna-strandness RF'
+    }
+    
     if (!params.singleEnd && params.flip) {
         """
-        echo ${name}
-
-        reformat.sh -Xmx20g \
-                t=16 \
-                in=${name}_1.fastq.gz \
-                in2=${name}_2.fastq.gz \
-                out=${name}_1.flip.fastq.gz \
-                out2=${name}_2.flip.fastq.gz \
+        echo ${name}         
+        reformat.sh -Xmx40g \
+                t=32 \
+                in=${reads[0]} \
+                in2=${reads[1]} \
+                out=${prefix_pe}_1.flip.fastq.gz \
+                out2=${prefix_pe}_2.flip.fastq.gz \
                 rcomp=t
-
-        bbduk.sh -Xmx20g \
-                t=16 \
-                in=${name}_1.flip.fastq.gz \
-                in2=${name}_2.flip.fastq.gz \
-                out=${name}_1.flip.trim.fastq.gz \
-                out2=${name}_2.flip.trim.fastq.gz \
-                ref=${bbmap_adapters} \
-                ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
-                nullifybrokenquality=t \
-                maq=10 minlen=25 \
-                tpe tbo \
-                literal=AAAAAAAAAAAAAAAAAAAAAAA \
-                stats=${name}.trimstats.txt \
-                refstats=${name}.refstats.txt
+                
+        bbduk.sh -Xmx40g \
+                  t=32 \
+                  in=${prefix_pe}_1.flip.fastq.gz \
+                  in2=${prefix_pe}_2.flip.fastq.gz \
+                  out=${prefix_pe}_1.flip.trim.fastq.gz \
+                  out2=${prefix_pe}_2.flip.trim.fastq.gz \
+                  ref=${bbmap_adapters} \
+                  ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                  maq=10 minlen=25 \
+                  tpe tbo \
+                  literal=AAAAAAAAAAAAAAAAAAAAAAA \
+                  stats=${prefix_pe}.trimstats.txt \
+                  refstats=${prefix_pe}.refstats.txt
+                  
+        hisat2 -p 32 \
+               --very-sensitive \
+               -x ${indices_path} \
+               -1 ${prefix_pe}_1.flip.trim.fastq.gz \
+               -2 ${prefix_pe}_2.flip.trim.fastq.gz \
+                $rnastrandness \
+               --pen-noncansplice 14 \
+               --mp 1,0 \
+               --sp 3,1 \
+               --new-summary \
+               > ${prefix_pe}.sam \
+               2> ${prefix_pe}.hisat2_mapstats.txt                  
+        """
+    } else if (params.singleEnd && params.flip) {
+        """
+        echo ${name}        
+        reformat.sh -Xmx40g \
+                t=32 \
+                in=${reads} \
+                out=${prefix_se}.flip.fastq.gz \
+                rcomp=t
+        
+        bbduk.sh -Xmx40g \
+                  t=32 \
+                  in=${prefix_se}.flip.fastq.gz \
+                  out=${prefix_se}.flip.trim.fastq.gz \
+                  ref=${bbmap_adapters} \
+                  ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
+                  maq=10 minlen=25 \
+                  literal=AAAAAAAAAAAAAAAAAAAAAAA \
+                  stats=${prefix_se}.trimstats.txt \
+                  refstats=${prefix_se}.refstats.txt
+                  
+        hisat2  -p 32 \
+                --very-sensitive \
+                $rnastrandness \
+                --pen-noncansplice 14 \
+                --mp 1,0 \
+                --sp 3,1 \
+                -x ${indices_path}\
+                -U ${prefix_se}.trim.fastq.gz \
+                --new-summary \
+                > ${prefix_se}.sam \
+                2> ${prefix_se}.hisat2_mapstats.txt               
         """
     } else if (!params.singleEnd && params.flipR2) {
                 """
-        echo ${name}
+        echo ${prefix_pe}
 
-        reformat.sh -Xmx20g \
-                t=16 \
-                in=${name}_1.fastq.gz \
-                in2=${name}_2.fastq.gz \
-                out=${name}_1.flip.fastq.gz \
-                out2=${name}_2.flip.fastq.gz \
+        reformat.sh -Xmx40g \
+                t=32 \
+                in=${reads[0]} \
+                in2=${reads[1]} \
+                out=${prefix_pe}.flip.fastq.gz \
+                out2=${prefix_pe}.flip.fastq.gz \
                 rcompmate=t
 
-        bbduk.sh -Xmx20g \
-                t=16 \
-                in=${name}_1.flip.fastq.gz \
-                in2=${name}_2.flip.fastq.gz \
-                out=${name}_1.flip.trim.fastq.gz \
-                out2=${name}_2.flip.trim.fastq.gz \
+        bbduk.sh -Xmx40g \
+                t=32 \
+                in=${prefix_pe}.flip.fastq.gz \
+                in2=${prefix_pe}.flip.fastq.gz \
+                out=${prefix_pe}.flip.trim.fastq.gz \
+                out2=${prefix_pe}.flip.trim.fastq.gz \
                 ref=${bbmap_adapters} \
                 ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
                 nullifybrokenquality=t \
                 maq=10 minlen=25 \
                 tpe tbo \
                 literal=AAAAAAAAAAAAAAAAAAAAAAA \
-                stats=${name}.trimstats.txt \
-                refstats=${name}.refstats.txt
+                stats=${prefix_pe}.trimstats.txt \
+                refstats=${prefix_pe}.refstats.txt
+                
+        hisat2 -p 32 \
+               --very-sensitive \
+               -x ${indices_path} \
+               -1 ${prefix_pe}_1.flip.trim.fastq.gz \
+               -2 ${prefix_pe}_2.flip.trim.fastq.gz \
+                $rnastrandness \
+               --pen-noncansplice 14 \
+               --mp 1,0 \
+               --sp 3,1 \
+               --new-summary \
+               > ${prefix_pe}.sam \
+               2> ${prefix_pe}.hisat2_mapstats.txt                   
         """
-    } else if (params.flip) {
+    } else if (!params.singleEnd) {
         """
-        echo ${name}
+        echo ${prefix_pe}
 
-
-        reformat.sh -Xmx20g \
-                t=16 \
-                in=${name}.fastq.gz \
-                out=${name}.flip.fastq.gz \
-                rcomp=t
-
-        
-        bbduk.sh -Xmx20g \
-                  t=16 \
-                  in=${name}.flip.fastq.gz \
-                  out=${name}.flip.trim.fastq.gz \
+        bbduk.sh -Xmx40g \
+                  t=32 \
+                  in=${reads[0]} \
+                  in2=${reads[1]} \
+                  out=${prefix_pe}_1.trim.fastq.gz \
+                  out2=${prefix_pe}_2.trim.fastq.gz \
                   ref=${bbmap_adapters} \
                   ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
-                  nullifybrokenquality=t \
                   maq=10 minlen=25 \
                   tpe tbo \
                   literal=AAAAAAAAAAAAAAAAAAAAAAA \
-                  stats=${name}.trimstats.txt \
-                  refstats=${name}.refstats.txt
-        """
-    }
-        else if (!params.singleEnd) {
-        """
-        echo ${name}      
-
-        bbduk.sh -Xmx20g \
-                  t=16 \
-                  in=${name}_1.fastq.gz \
-                  in2=${name}_2.fastq.gz \
-                  out=${name}_1.trim.fastq.gz \
-                  out2=${name}_2.trim.fastq.gz \
-                  ref=${bbmap_adapters} \
-                  ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
-                  nullifybrokenquality=t \
-                  maq=10 minlen=25 \
-                  tpe tbo \
-                  literal=AAAAAAAAAAAAAAAAAAAAAAA \
-                  stats=${name}.trimstats.txt \
-                  refstats=${name}.refstats.txt
+                  stats=${prefix_pe}.trimstats.txt \
+                  refstats=${prefix_pe}.refstats.txt
+                  
+        hisat2 -p 32 \
+               --very-sensitive \
+               -x ${indices_path} \
+               -1 ${prefix_pe}_1.trim.fastq.gz \
+               -2 ${prefix_pe}_2.trim.fastq.gz \
+                $rnastrandness \
+               --pen-noncansplice 14 \
+               --mp 1,0 \
+               --sp 3,1 \
+               --new-summary \
+               > ${prefix_pe}.sam \
+               2> ${prefix_pe}.hisat2_mapstats.txt                              
         """
     } else {
         """
-        echo ${name}
-        
-        bbduk.sh -Xmx20g \
-                  t=16 \
-                  in=${name}.fastq.gz \
-                  out=${name}.trim.fastq.gz \
+        echo ${prefix_se}
+
+        bbduk.sh -Xmx40g \
+                  t=32 \
+                  in=${reads} \
+                  out=${prefix_se}.trim.fastq.gz \
                   ref=${bbmap_adapters} \
                   ktrim=r qtrim=10 k=23 mink=11 hdist=1 \
-                  nullifybrokenquality=t \
                   maq=10 minlen=25 \
-                  tpe tbo \
                   literal=AAAAAAAAAAAAAAAAAAAAAAA \
-                  stats=${name}.trimstats.txt \
-                  refstats=${name}.refstats.txt
+                  stats=${prefix_se}.trimstats.txt \
+                  refstats=${prefix_se}.refstats.txt                   
+                  
+        hisat2  -p 32 \
+                --very-sensitive \
+                $rnastrandness \
+                --pen-noncansplice 14 \
+                --mp 1,0 \
+                --sp 3,1 \
+                -x ${indices_path} \
+                -U ${prefix_se}.trim.fastq.gz \
+                --new-summary \
+                > ${prefix_se}.sam \
+                2> ${prefix_se}.hisat2_mapstats.txt                  
         """
-    }
+    } 
 }
 
 
 /*
- * STEP 2b - Trimmed FastQC
+ * STEP 2+ - Trimmed FastQC
  */
 
-process fastqc_trimmed {
+process fastQC_trim {
     validExitStatus 0,1
     tag "$name"
     memory '4 GB'
-    publishDir "${params.outdir}/qc/fastqc/", mode: 'copy',
-        saveAs: {filename -> filename.indexOf(".zip") > 0 ? "zips/$filename" : "$filename"}
+    publishDir "${params.outdir}" , mode: 'copy',
+    saveAs: {filename ->
+             if (filename.indexOf("zip") > 0)   "qc/fastqc/zips/$filename"
+        else if (filename.indexOf("html") > 0)  "qc/fastqc/$filename"
+        else null            
+    }
+    
+    when:
+    !params.skipFastQC && !params.skipAllQC && !noTrim
 
     input:
     set val(name), file(trimmed_reads) from trimmed_reads_fastqc
 
     output:
-    file "*_fastqc.{zip,html,txt}" into trimmed_fastqc_results
+    file "*_fastqc.{zip,html}" into trimmed_fastqc_results
 
     script:
     """
     echo ${name}
-
-    fastqc $trimmed_reads
+    
+    fastqc ${trimmed_reads}
     """
 }
 
-
 /*
- * STEP 3 - Map reads to reference genome
+ * STEP 2+ - Map reads to reference genome w/o trimming
  */
 
-process hisat2 {
-    tag "$name"
-    validExitStatus 0
-    cpus 32
-    memory '100 GB'
-    time '2h'
-    publishDir "${params.outdir}/qc/hisat2_mapstats", mode: 'copy', pattern: "*.txt"
-
-    input:
-    file(indices) from hisat2_indices
-    val(indices_path) from hisat2_indices
-    set val(name), file(trimmed_reads) from trimmed_reads_hisat2
-
-    output:
-    set val(name), file("*.sam") into hisat2_sam
-    file("*.txt") into hisat2_mapstats    
-
-    script:
-    if (!params.singleEnd && !params.flip) {
-        """
-        echo ${name}
+if (params.noTrim) {
+    process hisat2 {
+        tag "$name"
+        validExitStatus 0
+        cpus 32
+        memory '40 GB'
+        time '2h'
+        publishDir "${params.outdir}/qc/hisat2_mapstats", mode: 'copy', pattern: "*.txt"
     
-        hisat2  -p 32 \
-                --very-sensitive \
-                -x ${indices_path} \
-                --pen-noncansplice 14 \
-                --mp 1,0 \
-                --sp 3,1 \
-                -1 ${name}_1.trim.fastq.gz \
-                -2 ${name}_2.trim.fastq.gz \
-                --new-summary \
-                > ${name}.sam \
-                2> ${name}.hisat2_mapstats.txt                
-        """
-    }
-    if (!params.singleEnd && (params.flip || params.flipR2)) {
-        """
-        echo ${name}
-        hisat2  -p 32 \
-                --very-sensitive \
-                -x ${indices_path} \
-                --pen-noncansplice 14 \
-                --mp 1,0 \
-                --sp 3,1 \
-                -1 ${name}_1.flip.trim.fastq.gz \
-                -2 ${name}_2.flip.trim.fastq.gz \
-                --new-summary \
-                > ${name}.sam \
-                2> ${name}.hisat2_mapstats.txt                
-        """
-    }
-    else {
-        """
-        echo ${name}
+        input:
+        file(indices) from hisat2_indices
+        val(indices_path) from hisat2_indices
+        set val(name), file(reads) from fastq_reads_hisat2_notrim_sra.mix(fastq_reads_hisat2_notrim)
     
-        hisat2  -p 32 \
-                --very-sensitive \
-                --pen-noncansplice 14 \
-                --mp 1,0 \
-                --sp 3,1 \
-                -x ${indices_path}\
-                -U ${trimmed_reads} \
-                --new-summary \
-                > ${name}.sam \
-                2> ${name}.hisat2_mapstats.txt                
-        """
+        output:
+        set val(name), file("*.sam") into hisat2_sam
+        file("*.txt") into hisat2_mapstats
+    
+        script:
+        prefix_pe = trimmed_reads[0].toString() - ~/(_1\.)?(_R1)?(flip)?(trim)?(\.flip)?(\.fq)?(fq)?(\.fastq)?(fastq)?(\.gz)?$/
+        prefix_se = trimmed_reads[0].toString() - ~/(\.flip)?(\.fq)?(\.fastq)?(\.gz)?$/
+        
+        def rnastrandness = ''
+        if (params.forwardStranded && !params.unStranded){
+            rnastrandness = params.singleEnd ? '--rna-strandness F' : '--rna-strandness FR'
+        } else if (params.reverseStranded && !params.unStranded){
+            rnastrandness = params.singleEnd ? '--rna-strandness R' : '--rna-strandness RF'
+        }
+        
+        if (!params.singleEnd) {
+            """
+            echo ${prefix_pe}
+        
+            hisat2 -p 32 \
+                   --very-sensitive \
+                   $rnastrandness \
+                   --pen-noncansplice 14 \
+                   --mp 1,0 \
+                   --sp 3,1 \
+                   -x ${indices_path} \
+                   -1 ${reads[0]} \
+                   -2 ${reads[1]} \
+                   --new-summary \
+                   > ${prefix_pe}.sam \
+                   2> ${prefix_pe}.hisat2_mapstats.txt                
+            """
+        }
+        else {
+            """
+            echo ${prefix_se}
+        
+            hisat2  -p 32 \
+                   --very-sensitive \
+                   $rnastrandness \
+                   --pen-noncansplice 14 \
+                   --mp 1,0 \
+                   --sp 3,1 \
+                   -x ${indices_path} \
+                   -U ${reads} \
+                   --new-summary \
+                   > ${prefix_se}.sam \
+                   2> ${prefix_se}.hisat2_mapstats.txt                
+            """
+        }
     }
 }
 
+
 /*
- * STEP 4 - Convert to BAM format and sort
+ * STEP 3 - Convert to BAM/CRAM format and sort
  */
 
 process samtools {
     tag "$name"
-    memory '100 GB'
+    memory '40 GB'
     cpus 16
     publishDir "${params.outdir}" , mode: 'copy',
     saveAs: {filename ->
-             if ((filename.indexOf("sorted.bam") > 0) & !params.skipBAM)                                                                                                                             "mapped/bams/$filename"
-        else if ((filename.indexOf("sorted.bam.bai") > 0) & !params.skipBAM)                                                                                                                         "mapped/bams/$filename"
-        else if (filename.indexOf("flagstat") > 0)                    "qc/mapstats/$filename"
-        else if (filename.indexOf("millionsmapped") > 0)              "qc/mapstats/$filename"
-        else if (filename.indexOf("sorted.cram") > 0)                 "mapped/crams/$filename"
-        else if (filename.indexOf("sorted.cram.crai") > 0)            "mapped/crams/$filename"
+             if ((filename.indexOf("sorted.bam") > 0) & params.saveBAM)     "mapped/bams/$filename"
+        else if ((filename.indexOf("sorted.bam.bai") > 0) & params.saveBAM) "mapped/bams/$filename"
+        else if (filename.indexOf("flagstat") > 0)                          "qc/mapstats/$filename"
+        else if (filename.indexOf("millionsmapped") > 0)                    "qc/mapstats/$filename"
+        else if (filename.indexOf("sorted.cram") > 0)                       "mapped/crams/$filename"
+        else if (filename.indexOf("sorted.cram.crai") > 0)                  "mapped/crams/$filename"
+        else null            
     }
 
     input:
@@ -623,13 +717,12 @@ process samtools {
     set val(name), file("${name}.sorted.bam.bai") into sorted_bam_indices_ch
     set val(name), file("${name}.flagstat") into bam_flagstat
     set val(name), file("${name}.millionsmapped") into bam_milmapped_bedgraph
-    set val(name), file("${name}.sorted.cram") into cram_out
-    set val(name), file("${name}.sorted.cram.crai") into cram_index_out
+    set val(name), file("${name}.sorted.cram") into cram
+    set val(name), file("${name}.sorted.cram.crai") into cram_index
 
     script:
     if (!params.singleEnd) {
     """
-
     samtools view -@ 16 -bS -o ${name}.bam ${mapped_sam}
     samtools sort -@ 16 ${name}.bam > ${name}.sorted.bam
     samtools flagstat ${name}.sorted.bam > ${name}.flagstat
@@ -641,7 +734,6 @@ process samtools {
     """
     } else {
     """
-
     samtools view -@ 16 -bS -o ${name}.bam ${mapped_sam}
     samtools sort -@ 16 ${name}.bam > ${name}.sorted.bam
     samtools flagstat ${name}.sorted.bam > ${name}.flagstat
@@ -661,7 +753,7 @@ sorted_bam_indices_ch
     .into {sorted_bam_indices_for_bedtools_bedgraph; sorted_bam_indices_for_bedtools_normalized_bedgraph; sorted_bam_indicies_for_pileup; sorted_bam_indices_for_preseq; sorted_bam_indices_for_rseqc; sorted_bam_indices_for_rseqc_count}
 
 /*
- *STEP 5a - Plot the estimated complexity of a sample, and estimate future yields
+ *STEP 4 - Plot the estimated complexity of a sample, and estimate future yields
  *         for complexity if the sample is sequenced at higher read depths.
  */
 
@@ -691,7 +783,7 @@ process preseq {
 
 
 /*
- *STEP 5b - Analyze read distributions using RSeQC
+ *STEP 4+ - Analyze read distributions using RSeQC
  */
 
 process rseqc_qc {
@@ -787,7 +879,7 @@ process rseqc_count {
 
 
 /*
- *STEP 5c - Analyze coverage using pileup.sh
+ *STEP 4+ - Analyze coverage using pileup.sh
  */
 
 process pileup {
@@ -813,7 +905,7 @@ process pileup {
  }
 
 /*
- *STEP 6a - Create non-normalzied bedGraphs for analysis using FStitch/Tfit
+ *STEP 5 - Create non-normalzied bedGraphs for analysis using FStitch/Tfit
  */
 
 process bedgraphs {
@@ -821,9 +913,7 @@ process bedgraphs {
     tag "$name"
     memory '80 GB'
     time '4h'
-    if (params.savebg) {
-            publishDir "${params.outdir}/mapped/bedgraphs", mode: 'copy', pattern: "${name}.bedGraph"
-    } 
+    publishDir "${params.outdir}/mapped/bedgraphs", mode: 'copy', pattern: "${name}.bedGraph"
 
     input:
     set val(name), file(bam_file) from sorted_bams_for_bedtools_bedgraph
@@ -839,64 +929,135 @@ process bedgraphs {
     set val(name), file("${name}.neg.rcc.bedGraph") into bedgraph_bigwig_neg
 
     script:
-    """
-
+    if (params.singleEnd) {
+    """    
     genomeCoverageBed \
-                     -bg \
-                     -strand + \
-                     -g hg38 \
-                     -ibam ${bam_file} \
-                     -split \
-                     > ${name}.pos.bedGraph
-
+        -bg \
+        -strand + \
+        -g ${chrom_sizes} \
+        -ibam ${bam_file} \
+        > ${name}.pos.bedGraph
     genomeCoverageBed \
-                     -bg \
-                     -strand - \
-                     -g hg38 \
-                     -ibam ${bam_file} \
-                     -split \
-                     > ${name}.tmp.neg.bedGraph
-
-     awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' ${name}.tmp.neg.bedGraph \
+        -bg \
+        -strand - \
+        -g ${chrom_sizes} \
+        -ibam ${bam_file} \
+        | awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' \
         > ${name}.neg.bedGraph
-        rm ${name}.tmp.neg.bedGraph
 
     cat ${name}.pos.bedGraph \
         ${name}.neg.bedGraph \
         > ${name}.unsorted.bedGraph
-
+        
     sortBed \
-             -i ${name}.unsorted.bedGraph \
-             > ${name}.bedGraph
-
-    rm ${name}.unsorted.bedGraph
+        -i ${name}.unsorted.bedGraph \
+        > ${name}.bedGraph
 
     python ${params.rcc} \
         ${name}.bedGraph \
         ${millions_mapped} \
-        ${name}.rcc.bedGraph \
-
+        ${name}.rcc.bedGraph
+        
     python ${params.rcc} \
         ${name}.pos.bedGraph \
         ${millions_mapped} \
         ${name}.unsorted.pos.rcc.bedGraph
-
     sortBed -i ${name}.unsorted.pos.rcc.bedGraph > ${name}.pos.rcc.bedGraph
-    rm ${name}.unsorted.pos.rcc.bedGraph
 
     python ${params.rcc} \
         ${name}.neg.bedGraph \
         ${millions_mapped} \
         ${name}.unsorted.neg.rcc.bedGraph
-
     sortBed -i ${name}.unsorted.neg.rcc.bedGraph > ${name}.neg.rcc.bedGraph
-    rm ${name}.unsorted.neg.rcc.bedGraph
-
     """
+    } else {
+    """   
+    samtools view \
+        -h -b -f 0x0040 \
+        ${bam_file} \
+        > ${name}.first_pair.bam
+        
+    samtools view \
+        -h -b -f 0x0080 \
+        ${bam_file} \
+        > ${name}.second_pair.bam
+        
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand - \
+        -g ${chrom_sizes} \
+        -ibam ${name}.first_pair.bam \
+        | sortBed \
+        > ${name}.first_pair.pos.bedGraph
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand + \
+        -g ${chrom_sizes} \
+        -ibam ${name}.first_pair.bam \
+        | sortBed \
+        | awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' \
+        > ${name}.first_pair.neg.bedGraph
+                     
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand + \
+        -g ${chrom_sizes} \
+        -ibam ${name}.second_pair.bam \
+        | sortBed \
+        > ${name}.second_pair.pos.bedGraph
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand - \
+        -g ${chrom_sizes} \
+        -ibam ${name}.second_pair.bam \
+        | awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' \
+        | sortBed \
+        > ${name}.second_pair.neg.bedGraph
+                     
+    unionBedGraphs \
+        -i ${name}.first_pair.pos.bedGraph ${name}.second_pair.pos.bedGraph \
+        | awk -F '\t' {'print \$1"\t"\$2"\t"\$3"\t"(\$4+\$5)'} \
+        > ${name}.pos.bedGraph 
+        
+    unionBedGraphs \
+        -i ${name}.first_pair.neg.bedGraph ${name}.second_pair.neg.bedGraph \
+        | awk -F '\t' {'print \$1"\t"\$2"\t"\$3"\t"(\$4+\$5)'} \
+        > ${name}.neg.bedGraph 
+    
+    cat ${name}.pos.bedGraph \
+        ${name}.neg.bedGraph \
+        > ${name}.unsorted.bedGraph
+        
+    sortBed \
+        -i ${name}.unsorted.bedGraph \
+        > ${name}.bedGraph
+
+    python ${params.rcc} \
+        ${name}.bedGraph \
+        ${millions_mapped} \
+        ${name}.rcc.bedGraph
+        
+    python ${params.rcc} \
+        ${name}.pos.bedGraph \
+        ${millions_mapped} \
+        ${name}.unsorted.pos.rcc.bedGraph
+    sortBed -i ${name}.unsorted.pos.rcc.bedGraph > ${name}.pos.rcc.bedGraph
+
+    python ${params.rcc} \
+        ${name}.neg.bedGraph \
+        ${millions_mapped} \
+        ${name}.unsorted.neg.rcc.bedGraph
+    sortBed -i ${name}.unsorted.neg.rcc.bedGraph > ${name}.neg.rcc.bedGraph     
+    """
+    }
  }
 
 /*
- *STEP 7 - Normalize bigWigs by millions of reads mapped for visualization
+ *STEP 5 - Normalize bigWigs by millions of reads mapped for visualization
  */
 
 process normalized_bigwigs {
@@ -904,9 +1065,6 @@ process normalized_bigwigs {
     tag "$name"
     memory '30 GB'
     publishDir "${params.outdir}/mapped/rcc_bigwig", mode: 'copy'
-    
-    when:
-    params.savebw
 
     input:
     set val(name), file(neg_bedgraph) from bedgraph_bigwig_neg
@@ -925,7 +1083,7 @@ process normalized_bigwigs {
 }
 
 /*
- *STEP 8 - IGV Tools : generate tdfs for optimal visualization in Integrative Genomics Viewer (IGV)
+ *STEP 5+ - IGV Tools : generate tdfs for optimal visualization in Integrative Genomics Viewer (IGV)
  */
 
 process igvtools {
@@ -953,7 +1111,7 @@ process igvtools {
 
 
 /*
- * STEP 9 - MultiQC
+ * STEP 6 - MultiQC
  */
 process multiQC {
     validExitStatus 0,1,143

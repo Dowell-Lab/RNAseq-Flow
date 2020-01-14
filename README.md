@@ -74,8 +74,6 @@ The best way to run Nextflow is using an sbatch script using the same command sp
 | --saveTrim |               | Compresses and saves trimmed fastq reads.                 |
 | --saveAll  |               | Compresses and saves all fastq reads.                     |
 | --skipBAM  |               | Skips saving BAM files (only save CRAM). Default=False    |
-| --savebw   |               | Save normalized BigWig files for UCSC genome broswer.     |
-| --savebg   |               | Saves concatenated pos/neg bedGraph file.                 |
 
 **Input File Options**
 
@@ -84,6 +82,14 @@ The best way to run Nextflow is using an sbatch script using the same command sp
 | --singleEnd  |             | Specifies that the input files are not paired reads (default is paired-end). |
 | --flip       |             | Reverse complements each strand. Necessary for some library preps.           |
 | --flipR2     |             | Reverse complements R2 only (will not work in singleEnd mode).               |
+
+**Strandness Options**
+
+| Arguments             | Usage       | Description                                                                  |
+|-----------------------|-------------|------------------------------------------------------------------------------|
+| --unStranded          |             | Input data will be procssed in HISAT2 as unstranded (default).               |
+| --forwardStranded     |             | Indicates data is forward first-stranded.                                    |
+| --reverseStranded     |             | Indicates data is reverse first-stranded.                                    |
 
 **Performance Options**
 
