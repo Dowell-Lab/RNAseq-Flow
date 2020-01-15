@@ -210,8 +210,6 @@ summary['Data Type']        = params.singleEnd ? 'Single-End' : 'Paired-End'
 summary['Save All fastq']   = params.saveAllfq ? 'YES' : 'NO'
 summary['Skip Trimming']    = params.noTrim ? 'NO' : 'YES'
 summary['Save BAM']         = params.skipBAM ? 'NO' : 'YES'
-summary['Save BigWig']      = params.savebw ? 'YES' : 'NO'
-summary['Save bedGraph']    = params.savebg ? 'YES' : 'NO'
 summary['Save fastq']       = params.savefq ? 'YES' : 'NO'
 summary['Save Trimmed']     = params.saveTrim ? 'YES' : 'NO'
 summary['Reverse Comp']     = params.flip ? 'YES' : 'NO'
@@ -700,8 +698,8 @@ process samtools {
     cpus 16
     publishDir "${params.outdir}" , mode: 'copy',
     saveAs: {filename ->
-             if ((filename.indexOf("sorted.bam") > 0) & params.saveBAM)     "mapped/bams/$filename"
-        else if ((filename.indexOf("sorted.bam.bai") > 0) & params.saveBAM) "mapped/bams/$filename"
+             if (filename.indexOf("sorted.bam") > 0)                       "mapped/bams/$filename"
+        else if (filename.indexOf("sorted.bam.bai") > 0)                    "mapped/bams/$filename"
         else if (filename.indexOf("flagstat") > 0)                          "qc/mapstats/$filename"
         else if (filename.indexOf("millionsmapped") > 0)                    "qc/mapstats/$filename"
         else if (filename.indexOf("sorted.cram") > 0)                       "mapped/crams/$filename"
