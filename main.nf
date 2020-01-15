@@ -477,7 +477,7 @@ process bbduk_hisat2 {
                 --mp 1,0 \
                 --sp 3,1 \
                 -x ${indices_path}\
-                -U ${prefix_se}.trim.fastq.gz \
+                -U ${prefix_se}.flip.trim.fastq.gz \
                 --new-summary \
                 > ${prefix_se}.sam \
                 2> ${prefix_se}.hisat2_mapstats.txt               
