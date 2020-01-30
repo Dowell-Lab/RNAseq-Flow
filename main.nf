@@ -59,9 +59,9 @@ def helpMessage() {
          --email                       Where to send workflow report email.
          
     Strandedness:
-         --forward_stranded            The library is forward stranded (e.g. NuGEN libraries).
-         --reverse_stranded            The library is reverse stranded (TruSeq libraries -- most common).
-         --unstranded                  The default behavior. 
+         --forwardStranded            The library is forward stranded (e.g. NuGEN libraries).
+         --reverseStranded            The library is reverse stranded (TruSeq libraries -- most common).
+         --unStranded                  The default behavior. 
 
     Performance options:
         --threadfqdump                 Runs multi-threading for fastq-dump for sra processing.
@@ -110,9 +110,9 @@ params.bbmap_adapters = "$baseDir/bin/adapters.fa"
 params.bedGraphToBigWig = "$baseDir/bin/bedGraphToBigWig"
 params.rcc = "$baseDir/bin/rcc.py"
 params.workdir = "./nextflowTemp"
-forward_stranded = params.forward_stranded
-reverse_stranded = params.reverse_stranded
-unstranded = params.unstranded
+forward_stranded = params.forwardStranded
+reverse_stranded = params.reverseStranded
+unstranded = params.unStranded
 params.extract_fastqc_stats = "$baseDir/bin/extract_fastqc_stats.sh"
 
 multiqc_config = file(params.multiqc_config)
