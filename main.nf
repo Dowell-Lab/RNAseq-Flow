@@ -931,12 +931,14 @@ process bedgraphs {
     """    
     genomeCoverageBed \
         -bg \
+        -split \
         -strand + \
         -g ${chrom_sizes} \
         -ibam ${bam_file} \
         > ${name}.pos.bedGraph
     genomeCoverageBed \
         -bg \
+        -split \
         -strand - \
         -g ${chrom_sizes} \
         -ibam ${bam_file} \
