@@ -253,7 +253,6 @@ try {
  * Parse software version numbers
  */
 process get_software_versions {
-    validExitStatus 0,1,127
     publishDir "${params.outdir}/software_versions/", mode: 'copy', pattern: '*.txt'
 
     output:
@@ -339,7 +338,6 @@ process sra_dump {
  */
 
 process fastQC {
-    validExitStatus 0,1
     tag "$prefix"
     memory '8 GB'
     publishDir "${params.outdir}" , mode: 'copy',
@@ -376,7 +374,6 @@ process fastQC {
  */
 
 process bbduk_hisat2 {
-    validExitStatus 0
     tag "$name"
     cpus 32
     time '2h'
@@ -591,7 +588,6 @@ process bbduk_hisat2 {
  */
 
 process fastQC_trim {
-    validExitStatus 0,1
     tag "$name"
     memory '4 GB'
     publishDir "${params.outdir}" , mode: 'copy',
@@ -625,7 +621,6 @@ process fastQC_trim {
 if (params.noTrim) {
     process hisat2 {
         tag "$name"
-        validExitStatus 0
         cpus 32
         memory '40 GB'
         time '2h'
@@ -776,7 +771,6 @@ process preseq {
 process rseqc_qc {
     tag "$name"
     time '8h'
-    validExitStatus 0,143
     memory '40 GB'
     publishDir "${params.outdir}/qc/rseqc" , mode: 'copy',
         saveAs: {filename ->
@@ -838,7 +832,6 @@ process rseqc_qc {
 process rseqc_count {
     tag "$name"
     time '8h'
-    validExitStatus 0,143
     memory '40 GB'
     publishDir "${params.outdir}/rseqc_counts" , mode: 'copy', pattern: "*FPKM.xls"
     
@@ -896,7 +889,6 @@ process pileup {
  */
 
 process bedgraphs {
-    validExitStatus 0,143
     tag "$name"
     memory '80 GB'
     time '4h'
@@ -1050,7 +1042,6 @@ process bedgraphs {
  */
 
 process normalized_bigwigs {
-    validExitStatus 0
     tag "$name"
     memory '30 GB'
     publishDir "${params.outdir}/mapped/rcc_bigwig", mode: 'copy'
@@ -1103,7 +1094,6 @@ process igvtools {
  * STEP 6 - MultiQC
  */
 process multiQC {
-    validExitStatus 0,1,143
     errorStrategy 'ignore'
     publishDir "${params.outdir}/multiqc/", mode: 'copy', pattern: "multiqc_report.html"
     publishDir "${params.outdir}/multiqc/", mode: 'copy', pattern: "*_data"
