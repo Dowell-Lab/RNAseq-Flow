@@ -253,31 +253,28 @@ try {
  * Parse software version numbers
  */
 process get_software_versions {
-    publishDir "${params.outdir}/software_versions/", mode: 'copy', pattern: '*.txt'
+    time '1h'
 
     output:
-    file 'software_versions_mqc.yaml' into software_versions_yaml
-    file '*.txt' into software_versions_text
+    stdout into software_versions
 
     script:
     """
-    echo $params.version > v_pipeline.txt
-    echo $workflow.nextflow.version > v_nextflow.txt
-    fastqc --version > v_fastqc.txt
-    bbversion.sh --version > v_bbduk.txt
-    hisat2 --version > v_hisat2.txt
-    samtools --version > v_samtools.txt
-    fastq-dump --version > v_fastq-dump.txt
-    preseq > v_preseq.txt
-    bedtools --version > v_bedtools.txt
-    igvtools version > v_igv-tools.txt
-
-    for X in `ls *.txt`; do
-        cat \$X >> all_versions.txt;
-    done
-    scrape_software_versions.py > software_versions_mqc.yaml
+    printf "rnaseqflow_version: %s\n" ${params.version}
+    printf "nextflow_version: %s\n" ${workflow.nextflow.version}
+    printf "fastqc_version: %s\n" \$(fastqc -v | head -1 | awk -F " v" '{print \$2}')
+    printf "bbmap_version: %s\n" \$(bbversion.sh --version | head -1)
+    printf "hisat2_version: %s\n" \$(hisat2 --version | head -1 | awk '{print \$NF}')
+    printf "samtools_version: %s\n" \$(samtools --version | head -1 | awk '{print \$NF}')
+    printf "preseq_version: %s\n" \$(preseq 2>&1 | head -2 | tail -1 | awk '{print \$NF}')
+    printf "bedtools_version: %s\n" \$(bedtools --version | head -1 | awk -F " v" '{print \$2}')
+    printf "igvtools_version: %s\n" \$(igvtools version | head -1 | awk '{print \$3}')
+    printf "rseqc_version: %s\n" \$(infer_experiment.py --version | head -1 | awk '{print \$NF}')
+    printf "pipeline_hash: %s\n" ${workflow.scriptId}
     """
 }
+
+software_versions.collectFile(name: "software_versions_rnaseq_${output_date}_${workflow.runName}.yaml", storeDir: "${params.outdir}/pipeline_info")
 
 /*
  * Step 1 -- get fastq files from downloaded sras
