@@ -118,6 +118,11 @@ params.extract_fastqc_stats = "$baseDir/bin/extract_fastqc_stats.sh"
 multiqc_config = file(params.multiqc_config)
 output_docs = file("$baseDir/docs/output.md")
 
+import java.text.SimpleDateFormat
+def date = new java.util.Date()
+def sdf = new SimpleDateFormat("yyMMdd")
+output_date =  sdf.format(date)
+
 // Validate inputs
 
 if ( params.genome ){
