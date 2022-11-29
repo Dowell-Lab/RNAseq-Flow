@@ -1111,7 +1111,6 @@ process multiQC {
     file ('qc/mapstats/*') from bam_flagstat.collect()
     file ('qc/rseqc/*') from rseqc_results.collect()
     file ('qc/preseq/*') from preseq_results.collect()
-    file ('software_versions/*') from software_versions_yaml
     file ('qc/hisat2_mapstats/*') from hisat2_mapstats.collect()
 
     output:
