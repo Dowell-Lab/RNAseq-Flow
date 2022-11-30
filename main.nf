@@ -257,6 +257,9 @@ try {
 /*
  * Parse software version numbers
  */
+
+software_versions = Channel.create()
+
 process get_software_versions {
     time '1h'
 
