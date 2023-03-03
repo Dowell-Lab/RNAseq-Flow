@@ -59,7 +59,7 @@ def helpMessage() {
          --email                       Where to send workflow report email.
          
     Strandedness:
-         --forwardStranded            The library is forward stranded (e.g. NuGEN libraries).
+         --forwardStranded            The library is forward stranded (e.g. NuGEN libraries); necessary for correct PE TDF generation
          --reverseStranded            The library is reverse stranded (TruSeq libraries -- most common).
          --unStranded                  The default behavior. 
 
@@ -172,7 +172,7 @@ if (params.fastqs) {
                             .map { file -> tuple(file.simpleName, file) }        
     } else {
         Channel
-            .fromFilePairs( params.fastqs, size: params.singleEnd ? 1 : 2 )
+            .fromFilePairs( params.fastqs )
             .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
             .into { fastq_reads_qc; fastq_reads_trim; fastq_reads_subsample }
     }
@@ -300,10 +300,10 @@ process sra_dump {
     }
     
     input:
-    set val(prefix), file(reads) from read_files_sra
+    tuple val(prefix), file(reads) from read_files_sra
 
     output:
-    set val(prefix), file("*.fastq.gz") into fastq_reads_qc_sra, fastq_reads_trim_sra, fastq_reads_hisat2_notrim_sra
+    tuple val(prefix), file("*.fastq.gz") into fastq_reads_qc_sra, fastq_reads_trim_sra, fastq_reads_hisat2_notrim_sra
    
 
     script:
@@ -357,21 +357,51 @@ process fastQC {
     !params.skipFastQC && !params.skipAllQC
 
     input:
-    set val(prefix), file(reads) from fastq_reads_qc.mix(fastq_reads_qc_sra)
+    tuple val(prefix), path(reads) from fastq_reads_qc.mix(fastq_reads_qc_sra)
 
     output:
     file "*.{zip,html}" into fastqc_results
     file "*.fastqc_stats.txt" into fastqc_stats
 
     script:
+    def reads_1 = ''
+    def reads_2 = ''
+    def prefix_1 = ''
+    def prefix_2 = ''
+    if (params.singleEnd) {
+        reads_1 = reads.first()
+        prefix_1 = reads_1.simpleName
+    } else {
+        reads_1 = reads.first()
+        reads_2 = reads.last()
+        prefix_1 = reads_1.simpleName
+        prefix_2 = reads_2.simpleName
+    }
+    if (params.singleEnd) {
     """
-    echo ${prefix}
-    fastqc $reads
-    
+    echo ${prefix_1}
+    fastqc ${reads_1}
+
     ${params.extract_fastqc_stats} \
-        --srr=${prefix} \
-        > ${prefix}.fastqc_stats.txt    
+        --srr=${prefix_1} \
+        > ${prefix_1}.fastqc_stats.txt
     """
+    } else {
+    """
+    echo ${prefix_1} ${prefix_2}
+    fastqc ${reads_1}
+
+    ${params.extract_fastqc_stats} \
+        --srr=${prefix_1} \
+        > ${prefix_1}.fastqc_stats.txt
+
+    fastqc ${reads_2}
+
+    ${params.extract_fastqc_stats} \
+        --srr=${prefix_2} \
+        > ${prefix_2}.fastqc_stats.txt
+    """
+    }
 }
 
 /*
@@ -381,7 +411,7 @@ process fastQC {
 process bbduk_hisat2 {
     tag "$name"
     cpus 32
-    time '2h'
+    time '4h'
     memory '40 GB'
     publishDir "${params.outdir}/qc/trimstats", mode: 'copy', pattern: "*.{refstats,trimstats}.txt"
     publishDir "${params.outdir}/qc/hisat2_mapstats", mode: 'copy', pattern: "*hisat2_mapstats.txt"    
@@ -896,7 +926,7 @@ process pileup {
 process bedgraphs {
     tag "$name"
     memory '80 GB'
-    time '4h'
+    time '10h'
     publishDir "${params.outdir}/mapped/bedgraphs", mode: 'copy', pattern: "${name}.bedGraph"
 
     input:
@@ -956,68 +986,68 @@ process bedgraphs {
         ${name}.unsorted.neg.rcc.bedGraph
     sortBed -i ${name}.unsorted.neg.rcc.bedGraph > ${name}.neg.rcc.bedGraph
     """
-    } else {
-    """   
-    samtools view \
-        -h -b -f 0x0040 \
-        ${bam_file} \
-        > ${name}.first_pair.bam
-        
+    } else if (params.forwardStranded) {
+    """
     samtools view \
         -h -b -f 0x0080 \
         ${bam_file} \
-        > ${name}.second_pair.bam
-        
+        > ${name}.rev_read.bam
+
+    samtools view \
+        -h -b -f 0x0040 \
+        ${bam_file} \
+        > ${name}.fw_read.bam
+
     genomeCoverageBed \
         -bg \
         -split \
         -strand - \
         -g ${chrom_sizes} \
-        -ibam ${name}.first_pair.bam \
+        -ibam ${name}.rev_read.bam \
         | sortBed \
-        > ${name}.first_pair.pos.bedGraph
+        > ${name}.rev_read.pos.bedGraph
     genomeCoverageBed \
         -bg \
         -split \
         -strand + \
         -g ${chrom_sizes} \
-        -ibam ${name}.first_pair.bam \
+        -ibam ${name}.rev_read.bam \
         | sortBed \
         | awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' \
-        > ${name}.first_pair.neg.bedGraph
-                     
+        > ${name}.rev_read.neg.bedGraph
+
     genomeCoverageBed \
         -bg \
         -split \
         -strand + \
         -g ${chrom_sizes} \
-        -ibam ${name}.second_pair.bam \
+        -ibam ${name}.fw_read.bam \
         | sortBed \
-        > ${name}.second_pair.pos.bedGraph
+        > ${name}.fw_read.pos.bedGraph
     genomeCoverageBed \
         -bg \
         -split \
         -strand - \
         -g ${chrom_sizes} \
-        -ibam ${name}.second_pair.bam \
+        -ibam ${name}.fw_read.bam \
         | awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' \
         | sortBed \
-        > ${name}.second_pair.neg.bedGraph
-                     
+        > ${name}.fw_read.neg.bedGraph
+
     unionBedGraphs \
-        -i ${name}.first_pair.pos.bedGraph ${name}.second_pair.pos.bedGraph \
+        -i ${name}.rev_read.pos.bedGraph ${name}.fw_read.pos.bedGraph \
         | awk -F '\t' {'print \$1"\t"\$2"\t"\$3"\t"(\$4+\$5)'} \
-        > ${name}.pos.bedGraph 
-        
+        > ${name}.pos.bedGraph
+
     unionBedGraphs \
-        -i ${name}.first_pair.neg.bedGraph ${name}.second_pair.neg.bedGraph \
+        -i ${name}.rev_read.neg.bedGraph ${name}.fw_read.neg.bedGraph \
         | awk -F '\t' {'print \$1"\t"\$2"\t"\$3"\t"(\$4+\$5)'} \
-        > ${name}.neg.bedGraph 
-    
+        > ${name}.neg.bedGraph
+
     cat ${name}.pos.bedGraph \
         ${name}.neg.bedGraph \
         > ${name}.unsorted.bedGraph
-        
+
     sortBed \
         -i ${name}.unsorted.bedGraph \
         > ${name}.bedGraph
@@ -1026,7 +1056,7 @@ process bedgraphs {
         ${name}.bedGraph \
         ${millions_mapped} \
         ${name}.rcc.bedGraph
-        
+
     python ${params.rcc} \
         ${name}.pos.bedGraph \
         ${millions_mapped} \
@@ -1037,7 +1067,90 @@ process bedgraphs {
         ${name}.neg.bedGraph \
         ${millions_mapped} \
         ${name}.unsorted.neg.rcc.bedGraph
-    sortBed -i ${name}.unsorted.neg.rcc.bedGraph > ${name}.neg.rcc.bedGraph     
+    sortBed -i ${name}.unsorted.neg.rcc.bedGraph > ${name}.neg.rcc.bedGraph
+    """
+    } else {
+    """
+    samtools view \
+        -h -b -f 0x0040 \
+        ${bam_file} \
+        > ${name}.rev_read.bam
+
+    samtools view \
+        -h -b -f 0x0080 \
+        ${bam_file} \
+        > ${name}.fw_read.bam
+
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand - \
+        -g ${chrom_sizes} \
+        -ibam ${name}.rev_read.bam \
+        | sortBed \
+        > ${name}.rev_read.pos.bedGraph
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand + \
+        -g ${chrom_sizes} \
+        -ibam ${name}.rev_read.bam \
+        | sortBed \
+        | awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' \
+        > ${name}.rev_read.neg.bedGraph
+
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand + \
+        -g ${chrom_sizes} \
+        -ibam ${name}.fw_read.bam \
+        | sortBed \
+        > ${name}.fw_read.pos.bedGraph
+    genomeCoverageBed \
+        -bg \
+        -split \
+        -strand - \
+        -g ${chrom_sizes} \
+        -ibam ${name}.fw_read.bam \
+        | awk 'BEGIN{FS=OFS="\t"} {\$4=-\$4}1' \
+        | sortBed \
+        > ${name}.fw_read.neg.bedGraph
+
+    unionBedGraphs \
+        -i ${name}.rev_read.pos.bedGraph ${name}.fw_read.pos.bedGraph \
+        | awk -F '\t' {'print \$1"\t"\$2"\t"\$3"\t"(\$4+\$5)'} \
+        > ${name}.pos.bedGraph
+
+    unionBedGraphs \
+        -i ${name}.rev_read.neg.bedGraph ${name}.fw_read.neg.bedGraph \
+        | awk -F '\t' {'print \$1"\t"\$2"\t"\$3"\t"(\$4+\$5)'} \
+        > ${name}.neg.bedGraph
+
+    cat ${name}.pos.bedGraph \
+        ${name}.neg.bedGraph \
+        > ${name}.unsorted.bedGraph
+
+    sortBed \
+        -i ${name}.unsorted.bedGraph \
+        > ${name}.bedGraph
+
+    python ${params.rcc} \
+        ${name}.bedGraph \
+        ${millions_mapped} \
+        ${name}.rcc.bedGraph
+
+    python ${params.rcc} \
+        ${name}.pos.bedGraph \
+        ${millions_mapped} \
+        ${name}.unsorted.pos.rcc.bedGraph
+    sortBed -i ${name}.unsorted.pos.rcc.bedGraph > ${name}.pos.rcc.bedGraph
+
+    python ${params.rcc} \
+        ${name}.neg.bedGraph \
+        ${millions_mapped} \
+        ${name}.unsorted.neg.rcc.bedGraph
+    sortBed -i ${name}.unsorted.neg.rcc.bedGraph > ${name}.neg.rcc.bedGraph
     """
     }
  }
@@ -1074,7 +1187,7 @@ process normalized_bigwigs {
 process igvtools {
     tag "$name"
     memory '200 GB'
-    time '1h'
+    time '4h'
     // This often blows up due to a ceiling in memory usage, so we can ignore
     // and re-run later as it's non-essential.
     errorStrategy 'ignore'
