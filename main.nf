@@ -172,8 +172,9 @@ if (params.fastqs) {
                             .map { file -> tuple(file.simpleName, file) }        
     } else {
         Channel
-            .fromFilePairs( params.fastqs )
-            .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
+
+            .fromFilePairs( "${params.fastqs.substring(0, params.fastqs.lastIndexOf('/'))}/*_{1,2}.fastq.gz" )
+            .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}, ${params.fastqs.getParent()}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
             .into { fastq_reads_qc; fastq_reads_trim; fastq_reads_subsample }
     }
 }
@@ -343,6 +344,8 @@ process sra_dump {
  */
 
 process fastQC {
+    // max of 15 jobs run at a time
+    maxForks 15
     tag "$prefix"
     memory '8 GB'
     publishDir "${params.outdir}" , mode: 'copy',
@@ -409,6 +412,8 @@ process fastQC {
  */
 
 process bbduk_hisat2 {
+    // max of 10 jobs run at a time
+    maxForks 10
     tag "$name"
     cpus 32
     time '4h'
@@ -1155,30 +1160,8 @@ process bedgraphs {
     }
  }
 
-/*
- *STEP 5 - Normalize bigWigs by millions of reads mapped for visualization
- */
 
-process normalized_bigwigs {
-    tag "$name"
-    memory '30 GB'
-    publishDir "${params.outdir}/mapped/rcc_bigwig", mode: 'copy'
 
-    input:
-    set val(name), file(neg_bedgraph) from bedgraph_bigwig_neg
-    set val(name), file(pos_bedgraph) from bedgraph_bigwig_pos
-    file(chrom_sizes) from chrom_sizes
-
-    output:
-    set val(name), file("*.rcc.bw") into normalized_bigwig
-
-    script:
-    """
-    ${params.bedGraphToBigWig} ${pos_bedgraph} ${chrom_sizes} ${name}.pos.rcc.bw
-    ${params.bedGraphToBigWig} ${neg_bedgraph} ${chrom_sizes} ${name}.neg.rcc.bw
-
-    """
-}
 
 /*
  *STEP 5+ - IGV Tools : generate tdfs for optimal visualization in Integrative Genomics Viewer (IGV)
@@ -1188,8 +1171,8 @@ process igvtools {
     tag "$name"
     memory '200 GB'
     time '4h'
-    // This often blows up due to a ceiling in memory usage, so we can ignore
-    // and re-run later as it's non-essential.
+ //    This often blows up due to a ceiling in memory usage, so we can ignore
+ //    and re-run later as it's non-essential.
     errorStrategy 'ignore'
     publishDir "${params.outdir}/mapped/tdfs", mode: 'copy', pattern: "*.tdf"
 
