@@ -53,7 +53,7 @@ def helpMessage() {
 
     Required arguments:
          -profile                      Configuration profile to use. <base, slurm>
-         --fastqs                      Directory pattern for fastq files: /project/*{R1,R2}*.fastq (Required if --sras not specified)
+         --fastqs                      Directory pattern for fastq files: /project/*{_1,_2}*.fastq (Required if --sras not specified)
          --sras                        Directory pattern for SRA files: /project/*.sras (Required if --fastqs not specified)
          --workdir                     Nextflow working directory where all intermediate files are saved.
          --email                       Where to send workflow report email.
