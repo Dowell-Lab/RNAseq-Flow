@@ -8,6 +8,7 @@ Steady Sate Analysis Pipeline. Started 2018-06-21.
  https://github.com/Dowell-Lab/RNA-seq-Flow
  #### Authors
  Margaret Gruca <magr0763@colorado.edu>
+edited by Hope Townsend
 ========================================================================================
 ========================================================================================
 
@@ -173,8 +174,9 @@ if (params.fastqs) {
     } else {
         Channel
 
-            .fromFilePairs( "${params.fastqs.substring(0, params.fastqs.lastIndexOf('/'))}/*_{1,2}.fastq.gz" )
-            .ifEmpty { exit 1, "Cannot find any reads matching: ${params.reads}, ${params.fastqs.getParent()}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
+            .fromFilePairs( "${params.fastqs.substring(0, params.fastqs.lastIndexOf('/'))}/*_{1,2,R1,R2}.fastq.gz" )
+            .ifEmpty { exit 1, "Cannot find any reads matching: "*_{1,2,R1,R2}.fastq.gz", ${params.fastqs}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
+            // If you have numbers after R2_ or 1_ then change to *_{1,2,R1,R2}_*.fastq.gz
             .into { fastq_reads_qc; fastq_reads_trim; fastq_reads_subsample }
     }
 }
