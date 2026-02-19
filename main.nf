@@ -172,11 +172,12 @@ if (params.fastqs) {
                             .fromPath(params.fastqs)
                             .map { file -> tuple(file.simpleName, file) }        
     } else {
+// If you have numbers after R2_ or 1_ then change to *_{1,2,R1,R2}_*.fastq.gz
+// Otherwise keep *_{1,2,R1,R2}.fastq.gz to avoid improper combining
         Channel
-
-            .fromFilePairs( "${params.fastqs.substring(0, params.fastqs.lastIndexOf('/'))}/*_{1,2,R1,R2}.fastq.gz" )
-            .ifEmpty { exit 1, "Cannot find any reads matching: "*_{1,2,R1,R2}.fastq.gz", ${params.fastqs}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
-            // If you have numbers after R2_ or 1_ then change to *_{1,2,R1,R2}_*.fastq.gz
+            .fromFilePairs( "${params.fastqs.substring(0, params.fastqs.lastIndexOf('/'))}/*_{R1,R2}.fastq.gz" )
+            .ifEmpty { exit 1, "Cannot find any reads matching: \"*_{1,2,R1,R2}.fastq.gz\", ${params.fastqs}\nNB: Path needs to be enclosed in quotes!\nIf this is single-end data, please specify --singleEnd on the command line." }
+            
             .into { fastq_reads_qc; fastq_reads_trim; fastq_reads_subsample }
     }
 }
